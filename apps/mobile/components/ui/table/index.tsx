@@ -19,6 +19,7 @@ import {
   tableCaptionStyle,
 } from './styles';
 import { Text, View } from 'react-native';
+import type { TextProps, ViewProps } from 'react-native';
 
 const TableHeaderContext = createContext<{
   isHeaderRow: boolean;
@@ -35,11 +36,11 @@ type ITableProps = React.ComponentProps<typeof ExpoTable>;
 type ITableHeaderProps = React.ComponentProps<typeof ExpoTHead>;
 type ITableBodyProps = React.ComponentProps<typeof ExpoTBody>;
 type ITableFooterProps = React.ComponentProps<typeof ExpoTFoot>;
-type ITableHeadProps = React.ComponentProps<typeof View | typeof Text> & {
+type ITableHeadProps = (ViewProps | TextProps) & {
   useRNView?: boolean;
 };
 type ITableRowProps = React.ComponentProps<typeof ExpoTR>;
-type ITableDataProps = React.ComponentProps<typeof View | typeof Text> & {
+type ITableDataProps = (ViewProps | TextProps) & {
   useRNView?: boolean;
 };
 type ITableCaptionProps = React.ComponentProps<typeof ExpoTCaption>;
@@ -111,23 +112,23 @@ const TableFooter = React.forwardRef<
 });
 
 const TableHead = React.forwardRef<
-  React.ComponentRef<typeof View | typeof Text>,
+  React.ComponentRef<typeof View> | React.ComponentRef<typeof Text>,
   ITableHeadProps
 >(function TableHead({ useRNView = false, className, ...props }, ref) {
   if (useRNView) {
     return (
       <View
-        ref={ref}
+        ref={ref as React.ForwardedRef<React.ComponentRef<typeof View>>}
         className={tableHeadStyle({ class: className })}
-        {...props}
+        {...(props as ViewProps)}
       />
     );
   } else {
     return (
       <Text
-        ref={ref}
+        ref={ref as React.ForwardedRef<React.ComponentRef<typeof Text>>}
         className={tableHeadStyle({ class: className })}
-        {...props}
+        {...(props as TextProps)}
       />
     );
   }
@@ -154,23 +155,23 @@ const TableRow = React.forwardRef<
 });
 
 const TableData = React.forwardRef<
-  React.ComponentRef<typeof View | typeof Text>,
+  React.ComponentRef<typeof View> | React.ComponentRef<typeof Text>,
   ITableDataProps
 >(function TableData({ useRNView = false, className, ...props }, ref) {
   if (useRNView) {
     return (
       <View
-        ref={ref}
+        ref={ref as React.ForwardedRef<React.ComponentRef<typeof View>>}
         className={tableDataStyle({ class: className })}
-        {...props}
+        {...(props as ViewProps)}
       />
     );
   } else {
     return (
       <Text
-        ref={ref}
+        ref={ref as React.ForwardedRef<React.ComponentRef<typeof Text>>}
         className={tableDataStyle({ class: className })}
-        {...props}
+        {...(props as TextProps)}
       />
     );
   }

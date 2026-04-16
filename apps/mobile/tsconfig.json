@@ -4,10 +4,12 @@
     "strict": true,
     "paths": {
       "@/*": [
-        "./src/*",
-        "./*"
+        "./src/*"
       ],
-      "@/assets/*": [
+      "@ui/*": [
+        "./components/ui/*"
+      ],
+      "@assets/*": [
         "./assets/*"
       ],
       "tailwind.config": [
@@ -19,6 +21,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
   ]
 }
