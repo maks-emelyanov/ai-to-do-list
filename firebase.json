@@ -1,0 +1,23 @@
+{
+  "hosting": {
+    "public": "apps/auth-web/public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/auth/exchange",
+        "run": {
+          "serviceId": "todoapp-auth-api",
+          "region": "us-east1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "todoapp-auth-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "firebase-admin": "^13.6.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
