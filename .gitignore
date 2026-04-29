@@ -28,3 +28,11 @@ venv/
 
 # Local tooling metadata
 .codex
+
+# Terraform and Terragrunt local state/cache
+.terraform/
+.terragrunt-cache/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/live/*/env.hcl

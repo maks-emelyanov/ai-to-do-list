@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Todo App Auth</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f4ef;
+        --card: #ffffff;
+        --text: #1c1f23;
+        --muted: #68707b;
+        --accent: #146ef5;
+        --border: #dce2ea;
+        --danger-bg: #fff0ef;
+        --danger-text: #8c2d24;
+        --notice-bg: #eef6ff;
+        --notice-text: #1c3f7a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      main {
+        width: min(100%, 520px);
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 28px;
+        box-shadow: 0 20px 50px rgba(28, 31, 35, 0.08);
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 2.25rem;
+        line-height: 1.08;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .eyebrow {
+        color: var(--muted);
+        font-size: 0.875rem;
+        font-weight: 700;
+      }
+
+      .actions {
+        display: grid;
+        gap: 10px;
+      }
+
+      button,
+      .button {
+        appearance: none;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font: inherit;
+        font-weight: 700;
+        min-height: 52px;
+        padding: 12px 18px;
+        text-decoration: none;
+      }
+
+      button.primary,
+      .button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        font-weight: 700;
+      }
+
+      input {
+        width: 100%;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        padding: 14px 16px;
+        font: inherit;
+        background: white;
+      }
+
+      .notice,
+      .error {
+        border-radius: 14px;
+        padding: 13px 15px;
+      }
+
+      .notice {
+        background: var(--notice-bg);
+        color: var(--notice-text);
+      }
+
+      .error {
+        background: var(--danger-bg);
+        color: var(--danger-text);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card stack">
+        <div class="stack">
+          <div class="eyebrow">Todo App</div>
+          <h1 id="title">Sign in</h1>
+          <p id="description">Choose a sign-in method to continue.</p>
+        </div>
+
+        <div id="message" class="notice hidden"></div>
+        <div id="error" class="error hidden"></div>
+
+        <form id="email-form" class="stack">
+          <label for="email">
+            Email
+            <input id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+          </label>
+          <button id="email-button" class="primary" type="submit">Send sign-in link</button>
+        </form>
+
+        <div id="provider-actions" class="actions">
+          <button data-provider="google" type="button">Continue with Google</button>
+          <button data-provider="apple" type="button">Continue with Apple</button>
+          <button data-provider="microsoft" type="button">Continue with Microsoft</button>
+        </div>
+        <div id="google-identity-button" class="hidden"></div>
+
+        <a id="open-app" class="button primary hidden" href="mobile://">Open app</a>
+      </section>
+    </main>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+      import {
+        GoogleAuthProvider,
+        OAuthProvider,
+        getAuth,
+        getRedirectResult,
+        isSignInWithEmailLink,
+        sendSignInLinkToEmail,
+        signInWithEmailLink,
+        signInWithCredential,
+        signInWithRedirect,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+
+      const AUTH_SESSION_KEY = "todoapp.hostedAuthSession";
+      const EMAIL_KEY = "todoapp.emailForSignIn";
+      const APP_URL = "mobile://";
+      const DEFAULT_FIREBASE_AUTH_DOMAIN = "synthetic-song-473914-h5.firebaseapp.com";
+      const CANONICAL_AUTH_HOST = DEFAULT_FIREBASE_AUTH_DOMAIN;
+      const REDIRECT_AUTH_HOSTS = new Set(["synthetic-song-473914-h5.web.app"]);
+      const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
+      const GOOGLE_WEB_CLIENT_ID = "322657163839-2mhk9udev5o2epc5ud6nam8ajo7ia988.apps.googleusercontent.com";
+      const AUTH_EXCHANGE_URL = new URL("/auth/exchange", window.location.origin).toString();
+      const ALLOWED_RETURN_PROTOCOLS = new Set(["http:", "https:", "mobile:"]);
+      const ALLOWED_RETURN_HOSTS = new Set([
+        "localhost",
+        "127.0.0.1",
+        "synthetic-song-473914-h5.firebaseapp.com",
+        "synthetic-song-473914-h5.web.app",
+        "auth",
+      ]);
+
+      if (REDIRECT_AUTH_HOSTS.has(window.location.hostname)) {
+        const canonicalUrl = new URL(window.location.href);
+        canonicalUrl.hostname = CANONICAL_AUTH_HOST;
+        window.location.replace(canonicalUrl.toString());
+        throw new Error("Redirecting to canonical Firebase Auth host.");
+      }
+
+      const firebaseConfig = {
+        apiKey: "REMOVED_GOOGLE_API_KEY",
+        authDomain: getFirebaseAuthDomain(),
+        projectId: "synthetic-song-473914-h5",
+        storageBucket: "synthetic-song-473914-h5.firebasestorage.app",
+        messagingSenderId: "322657163839",
+        appId: "1:322657163839:web:42bcb01db1c191d8c5b68a",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const title = document.getElementById("title");
+      const description = document.getElementById("description");
+      const message = document.getElementById("message");
+      const error = document.getElementById("error");
+      const emailForm = document.getElementById("email-form");
+      const emailInput = document.getElementById("email");
+      const emailButton = document.getElementById("email-button");
+      const providerActions = document.getElementById("provider-actions");
+      const googleIdentityButton = document.getElementById("google-identity-button");
+      const openApp = document.getElementById("open-app");
+      let googleIdentityScriptPromise = null;
+      let isGoogleIdentityInitialized = false;
+
+      function getParams() {
+        return new URL(window.location.href).searchParams;
+      }
+
+      function getFirebaseAuthDomain() {
+        if (!window.location.hostname || ["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+          return DEFAULT_FIREBASE_AUTH_DOMAIN;
+        }
+
+        return window.location.hostname;
+      }
+
+      function showMessage(text) {
+        message.textContent = text;
+        message.classList.remove("hidden");
+      }
+
+      function showError(text) {
+        error.textContent = text;
+        error.classList.remove("hidden");
+      }
+
+      function clearStatus() {
+        message.textContent = "";
+        error.textContent = "";
+        message.classList.add("hidden");
+        error.classList.add("hidden");
+      }
+
+      function setBusy(isBusy) {
+        emailButton.disabled = isBusy;
+        document.querySelectorAll("#provider-actions button").forEach((button) => {
+          button.disabled = isBusy;
+        });
+      }
+
+      function parseReturnTo(rawReturnTo) {
+        if (!rawReturnTo) {
+          return new URL(APP_URL);
+        }
+
+        const returnTo = new URL(rawReturnTo, window.location.origin);
+
+        if (!ALLOWED_RETURN_PROTOCOLS.has(returnTo.protocol)) {
+          throw new Error("This return URL is not allowed.");
+        }
+
+        if ((returnTo.protocol === "http:" || returnTo.protocol === "https:") && !ALLOWED_RETURN_HOSTS.has(returnTo.hostname)) {
+          throw new Error("This return URL is not allowed.");
+        }
+
+        return returnTo;
+      }
+
+      function readStoredSession() {
+        const stored = sessionStorage.getItem(AUTH_SESSION_KEY);
+
+        if (!stored) {
+          return null;
+        }
+
+        try {
+          return JSON.parse(stored);
+        } catch {
+          sessionStorage.removeItem(AUTH_SESSION_KEY);
+          return null;
+        }
+      }
+
+      function readSession() {
+        const params = getParams();
+        const stored = readStoredSession();
+        const state = params.get("state") || "";
+        const fromUrl = {
+          ...stored,
+          platform: params.get("platform") || stored?.platform || "web",
+          returnTo: params.get("returnTo") || stored?.returnTo || APP_URL,
+          state: state || stored?.state || "",
+        };
+
+        if (state) {
+          sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(fromUrl));
+          return fromUrl;
+        }
+
+        return stored || fromUrl;
+      }
+
+      function clearSession() {
+        sessionStorage.removeItem(AUTH_SESSION_KEY);
+      }
+
+      function removeProviderFromUrl() {
+        const nextUrl = new URL(window.location.href);
+
+        if (!nextUrl.searchParams.has("provider")) {
+          return;
+        }
+
+        nextUrl.searchParams.delete("provider");
+        window.history.replaceState({}, document.title, nextUrl.toString());
+      }
+
+      function redirectToReturnTo(payload) {
+        const session = readSession();
+        const nextUrl = parseReturnTo(session.returnTo);
+
+        Object.entries({
+          ...payload,
+          state: session.state,
+        }).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            nextUrl.searchParams.set(key, value);
+          }
+        });
+
+        clearSession();
+        window.location.replace(nextUrl.toString());
+      }
+
+      function getProvider(providerId) {
+        if (providerId === "google") {
+          const provider = new GoogleAuthProvider();
+          provider.addScope("email");
+          provider.addScope("profile");
+          return provider;
+        }
+
+        if (providerId === "apple") {
+          const provider = new OAuthProvider("apple.com");
+          provider.addScope("email");
+          provider.addScope("name");
+          return provider;
+        }
+
+        if (providerId === "microsoft") {
+          const provider = new OAuthProvider("microsoft.com");
+          provider.addScope("email");
+          provider.addScope("profile");
+          return provider;
+        }
+
+        throw new Error("Unknown sign-in provider.");
+      }
+
+      async function exchangeFirebaseIdToken(idToken) {
+        const response = await fetch(AUTH_EXCHANGE_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ idToken }),
+        });
+
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok || typeof payload.token !== "string") {
+          throw new Error("Unable to finish sign-in with the auth server.");
+        }
+
+        return payload.token;
+      }
+
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const existingScript = document.querySelector(`script[src="${src}"]`);
+
+          if (existingScript) {
+            existingScript.addEventListener("load", resolve, { once: true });
+            existingScript.addEventListener("error", reject, { once: true });
+            return;
+          }
+
+          const script = document.createElement("script");
+          script.src = src;
+          script.async = true;
+          script.defer = true;
+          script.addEventListener("load", resolve, { once: true });
+          script.addEventListener("error", reject, { once: true });
+          document.head.appendChild(script);
+        });
+      }
+
+      async function loadGoogleIdentityServices() {
+        if (window.google?.accounts?.id) {
+          return window.google.accounts.id;
+        }
+
+        googleIdentityScriptPromise ??= loadScript(GOOGLE_IDENTITY_SCRIPT_URL);
+        await googleIdentityScriptPromise;
+
+        if (!window.google?.accounts?.id) {
+          throw new Error("Unable to load Google sign-in.");
+        }
+
+        return window.google.accounts.id;
+      }
+
+      async function completeGoogleIdentitySignIn(response) {
+        if (!response?.credential) {
+          throw new Error("Google sign-in did not return an identity token.");
+        }
+
+        clearStatus();
+        setBusy(true);
+
+        const credential = GoogleAuthProvider.credential(response.credential);
+        const result = await signInWithCredential(auth, credential);
+        const token = await exchangeFirebaseIdToken(await result.user.getIdToken());
+        await signOut(auth).catch(() => {});
+
+        redirectToReturnTo({
+          provider: "google",
+          token,
+        });
+      }
+
+      async function initializeGoogleIdentityServices() {
+        const googleAccountsId = await loadGoogleIdentityServices();
+
+        if (!isGoogleIdentityInitialized) {
+          googleAccountsId.initialize({
+            client_id: GOOGLE_WEB_CLIENT_ID,
+            callback: (response) => {
+              completeGoogleIdentitySignIn(response).catch((nextError) => {
+                setBusy(false);
+                showError(nextError?.message ?? "Unable to finish Google sign-in.");
+              });
+            },
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+          isGoogleIdentityInitialized = true;
+        }
+
+        return googleAccountsId;
+      }
+
+      async function renderGoogleIdentityButton() {
+        const googleAccountsId = await initializeGoogleIdentityServices();
+        const width = Math.min(400, Math.max(240, googleIdentityButton.getBoundingClientRect().width || 400));
+
+        googleIdentityButton.replaceChildren();
+        googleIdentityButton.classList.remove("hidden");
+        googleAccountsId.renderButton(googleIdentityButton, {
+          type: "standard",
+          theme: "outline",
+          size: "large",
+          text: "continue_with",
+          shape: "pill",
+          width,
+        });
+      }
+
+      async function showGoogleIdentityButtonFallback() {
+        await renderGoogleIdentityButton();
+        showMessage("Use the Google button below to continue.");
+        setBusy(false);
+      }
+
+      async function beginGoogleIdentitySignIn() {
+        let promptDisplayed = false;
+        const googleAccountsId = await initializeGoogleIdentityServices();
+
+        googleIdentityButton.classList.add("hidden");
+        googleIdentityButton.replaceChildren();
+
+        googleAccountsId.prompt((notification) => {
+          if (notification.isDisplayMoment?.()) {
+            promptDisplayed = true;
+            return;
+          }
+
+          if (notification.isDismissedMoment?.()) {
+            setBusy(false);
+            return;
+          }
+
+          if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+            showGoogleIdentityButtonFallback().catch((nextError) => {
+              setBusy(false);
+              showError(nextError?.message ?? "Unable to start Google sign-in.");
+            });
+          }
+        });
+
+        window.setTimeout(() => {
+          if (!promptDisplayed && googleIdentityButton.classList.contains("hidden")) {
+            showGoogleIdentityButtonFallback().catch((nextError) => {
+              setBusy(false);
+              showError(nextError?.message ?? "Unable to start Google sign-in.");
+            });
+          }
+        }, 1500);
+      }
+
+      async function beginProviderSignIn(providerId) {
+        clearStatus();
+        setBusy(true);
+
+        const session = readSession();
+
+        if (!session.state) {
+          throw new Error("This sign-in request is missing state.");
+        }
+
+        sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ ...session, provider: providerId }));
+        removeProviderFromUrl();
+
+        if (providerId === "google") {
+          await beginGoogleIdentitySignIn();
+          return;
+        }
+
+        await signInWithRedirect(auth, getProvider(providerId));
+      }
+
+      async function completeProviderRedirect() {
+        const session = readSession();
+        const providerId = session.provider;
+
+        if (!providerId) {
+          return false;
+        }
+
+        if (providerId === "google") {
+          return false;
+        }
+
+        const result = await getRedirectResult(auth);
+
+        if (!result) {
+          throw new Error(
+            "Google sign-in returned without a Firebase credential. Confirm this auth domain is configured as a Google OAuth redirect URI, then try again."
+          );
+        }
+
+        const token = await exchangeFirebaseIdToken(await result.user.getIdToken());
+        await signOut(auth).catch(() => {});
+
+        redirectToReturnTo({
+          provider: providerId,
+          token,
+        });
+
+        return true;
+      }
+
+      async function sendEmailLink(email) {
+        const session = readSession();
+        const url = new URL(window.location.href);
+
+        url.search = "";
+        url.searchParams.set("state", session.state);
+        url.searchParams.set("returnTo", session.returnTo);
+        url.searchParams.set("platform", session.platform);
+        url.searchParams.set("mode", "email-link");
+
+        await sendSignInLinkToEmail(auth, email, {
+          handleCodeInApp: true,
+          url: url.toString(),
+        });
+
+        localStorage.setItem(EMAIL_KEY, email);
+        showMessage("Sign-in link sent. Open it on this device to finish.");
+      }
+
+      async function completeEmailLink() {
+        if (!isSignInWithEmailLink(auth, window.location.href)) {
+          return false;
+        }
+
+        title.textContent = "Finish sign-in";
+        description.textContent = "Confirm the email address that requested this link.";
+        providerActions.classList.add("hidden");
+
+        const storedEmail = localStorage.getItem(EMAIL_KEY);
+
+        if (!storedEmail) {
+          emailButton.textContent = "Finish sign-in";
+          return true;
+        }
+
+        await finishEmailLink(storedEmail);
+        return true;
+      }
+
+      async function finishEmailLink(email) {
+        const result = await signInWithEmailLink(auth, email, window.location.href);
+        const token = await exchangeFirebaseIdToken(await result.user.getIdToken());
+        await signOut(auth).catch(() => {});
+
+        localStorage.removeItem(EMAIL_KEY);
+        redirectToReturnTo({
+          provider: "emailLink",
+          token,
+        });
+      }
+
+      async function init() {
+        const params = getParams();
+        const mode = params.get("mode");
+        const session = readSession();
+
+        openApp.href = parseReturnTo(session.returnTo).toString();
+
+        try {
+          if (await completeEmailLink()) {
+            return;
+          }
+
+          if (await completeProviderRedirect()) {
+            return;
+          }
+        } catch (nextError) {
+          showError(nextError?.message ?? "Unable to complete sign-in.");
+          setBusy(false);
+          return;
+        }
+
+        if (mode === "email-link") {
+          title.textContent = "Check your email";
+          description.textContent = "Open the sign-in link we sent to finish.";
+        }
+
+        const requestedProvider = params.get("provider");
+
+        if (["google", "apple", "microsoft"].includes(requestedProvider)) {
+          await beginProviderSignIn(requestedProvider);
+        }
+      }
+
+      emailForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        clearStatus();
+        setBusy(true);
+
+        const email = emailInput.value.trim();
+
+        const action = isSignInWithEmailLink(auth, window.location.href)
+          ? finishEmailLink(email)
+          : sendEmailLink(email);
+
+        action
+          .catch((nextError) => {
+            showError(nextError?.message ?? "Unable to complete email sign-in.");
+          })
+          .finally(() => {
+            setBusy(false);
+          });
+      });
+
+      providerActions.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-provider]");
+
+        if (!button) {
+          return;
+        }
+
+        beginProviderSignIn(button.dataset.provider).catch((nextError) => {
+          setBusy(false);
+          showError(nextError?.message ?? "Unable to start sign-in.");
+        });
+      });
+
+      init().catch((nextError) => {
+        showError(nextError?.message ?? "Unable to load sign-in.");
+      });
+    </script>
+  </body>
+</html>
