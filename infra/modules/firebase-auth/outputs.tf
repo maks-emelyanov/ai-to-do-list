@@ -22,6 +22,31 @@ output "firebase_web_config" {
   }
 }
 
+output "auth_canonical_domain" {
+  description = "Canonical hosted auth domain."
+  value       = local.auth_canonical_domain
+}
+
+output "auth_hosting_url" {
+  description = "Canonical hosted auth URL for EXPO_PUBLIC_AUTH_WEB_URL."
+  value       = "https://${local.auth_canonical_domain}"
+}
+
+output "auth_redirect_domains" {
+  description = "Hosted auth domains that redirect to the canonical auth domain."
+  value       = local.auth_redirect_domains
+}
+
+output "auth_allowed_return_hosts" {
+  description = "Hosts the hosted auth page can redirect back to after sign-in."
+  value       = local.auth_allowed_return_hosts
+}
+
+output "firebase_authorized_domains" {
+  description = "Firebase Auth authorized domains managed by the module."
+  value       = local.firebase_authorized_domains
+}
+
 output "google_auth_provider_enabled" {
   description = "Whether the Google Firebase Auth provider is managed and enabled."
   value       = try(google_identity_platform_default_supported_idp_config.google[0].enabled, false)

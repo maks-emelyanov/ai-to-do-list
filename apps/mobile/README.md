@@ -1,142 +1,197 @@
-# Welcome to your Expo app 👋
+# Todo App Mobile Auth
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This Expo app uses Firebase Authentication as the identity authority, with one
+app-owned auth screen and a hosted Firebase auth relay for web and browser
+handoffs. Production auth requires an EAS development/custom client or a built
+app; Expo Go is only useful for unrelated UI work.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-## Hosted auth setup
-
-The app sends web, Android, and iOS users through the Firebase-hosted auth page.
-Native builds open that page with Expo's browser-backed auth session API. The
-hosted page completes Firebase sign-in in the browser, exchanges that Firebase
-ID token with the auth API, and returns a Firebase custom token to the app.
-
-1. Apply the Terragrunt stack from `infra/live/dev`. It builds `apps/auth-api`
-   with Cloud Build, pushes the image to Artifact Registry, and deploys Cloud
-   Run as `todoapp-auth-api` in `us-east1` with minimum instances at `0`, then
-   deploys `apps/auth-web/public` to Firebase Hosting. The root `firebase.json`
-   routes `/auth/exchange` to the Cloud Run service.
-2. Set the hosted auth page URL in every app environment:
-
-   ```bash
-   EXPO_PUBLIC_AUTH_WEB_URL=https://auth.example.com
-   ```
-
-3. In Firebase Authentication, enable **Email/Password** and **Email link
-   (passwordless sign-in)**.
-4. Add the domains used by your email-link flow to **Authentication > Settings >
-   Authorized domains**:
-   - the hosted auth page domain from `EXPO_PUBLIC_AUTH_WEB_URL`
-   - each web app origin that should complete email-link sign-in
-5. Keep these app identifiers in sync with Firebase and the native app config:
-
-   ```bash
-   EXPO_PUBLIC_ANDROID_PACKAGE_NAME=com.maks.todoapp
-   EXPO_PUBLIC_IOS_BUNDLE_ID=com.anonymous.mobile
-   ```
-
-6. Do not configure Android App Links or iOS Associated Domains for the Firebase
-   Auth helper domain. Firebase's email action links and OAuth redirect helper
-   URLs must stay in the browser-hosted auth flow. The app should receive only
-   the final custom-scheme callback, for example
-   `mobile://auth/provider-callback?...`.
-
-## Social auth setup
-
-The app uses one shared auth screen across web, Android, and iOS. Social sign-in
-is handled without native Google, Apple, or Microsoft SDKs. Each provider starts
-on the hosted auth page, completes with the Firebase Web SDK there, and then the
-auth API mints a Firebase custom token that the app uses to create its session.
-
-### Providers
-
-1. In Firebase Authentication, enable every provider you want to show.
-2. Enable matching app flags only after the provider is enabled in Firebase/Auth
-   infrastructure:
-
-   ```bash
-   EXPO_PUBLIC_ENABLE_GOOGLE_AUTH_PROVIDER=true
-   EXPO_PUBLIC_ENABLE_APPLE_AUTH_PROVIDER=true
-   EXPO_PUBLIC_ENABLE_MICROSOFT_AUTH_PROVIDER=true
-   ```
-
-3. Add the same values to the matching EAS environment used by each build
-   profile:
-
-   ```bash
-   eas env:create --environment development --name EXPO_PUBLIC_AUTH_WEB_URL --value https://auth.example.com
-   eas env:create --environment preview --name EXPO_PUBLIC_AUTH_WEB_URL --value https://auth.example.com
-   eas env:create --environment production --name EXPO_PUBLIC_AUTH_WEB_URL --value https://auth.example.com
-   eas env:create --environment development --name EXPO_PUBLIC_ENABLE_GOOGLE_AUTH_PROVIDER --value true
-   eas env:create --environment preview --name EXPO_PUBLIC_ENABLE_GOOGLE_AUTH_PROVIDER --value true
-   eas env:create --environment production --name EXPO_PUBLIC_ENABLE_GOOGLE_AUTH_PROVIDER --value true
-   eas env:create --environment development --name EXPO_PUBLIC_ENABLE_APPLE_AUTH_PROVIDER --value true
-   eas env:create --environment preview --name EXPO_PUBLIC_ENABLE_APPLE_AUTH_PROVIDER --value true
-   eas env:create --environment production --name EXPO_PUBLIC_ENABLE_APPLE_AUTH_PROVIDER --value true
-   eas env:create --environment development --name EXPO_PUBLIC_ENABLE_MICROSOFT_AUTH_PROVIDER --value true
-   eas env:create --environment preview --name EXPO_PUBLIC_ENABLE_MICROSOFT_AUTH_PROVIDER --value true
-   eas env:create --environment production --name EXPO_PUBLIC_ENABLE_MICROSOFT_AUTH_PROVIDER --value true
-   ```
-
-4. Add both the hosted auth page domain and the deployed web app origin to
-   Firebase Authentication > Settings > Authorized domains.
-
-5. Add the hosted auth page's canonical Firebase Auth handler URL to the Google
-   OAuth web client's authorized redirect URIs. For the dev project, this is
-   `https://synthetic-song-473914-h5.firebaseapp.com/__/auth/handler`. The
-   hosted page redirects `web.app` traffic to `firebaseapp.com` before starting
-   Google sign-in so Google receives this canonical redirect URI.
-
-6. Rebuild after updating the EAS environment so the hosted auth URL is
-   compiled into the native app.
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Run
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Useful local checks:
 
-### Other setup steps
+```bash
+npm run lint
+npx tsc --noEmit
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Final Architecture
 
-## Learn more
+The app UI owns the provider picker. The auth screen calls the unified auth
+service only:
 
-To learn more about developing your project with Expo, look at the following resources:
+- `signInWithProvider(provider)`
+- `sendEmailLink(email?)`
+- `completeIncomingAuthUrl(url)`
+- `signOut()`
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Provider-specific details stay behind that service in `src/auth/auth-service.ts`
+and `src/lib/social-auth.ts`.
 
-## Join the community
+Firebase Auth is the single identity backend. Native providers sign into
+Firebase directly when a secure native path exists. Hosted browser flows sign
+into Firebase on the hosted page, call `/auth/exchange` for a short-lived
+one-time exchange code, and the app redeems that code at `/auth/session` for a
+Firebase custom token. Exchange codes are bound to provider, state, platform,
+and return target.
 
-Join our community of developers creating universal apps.
+The hosted auth page is a generated-config static app. Terraform renders
+`apps/auth-web/public/auth-config.js` before Firebase Hosting deploy, using the
+environment's Firebase web config, canonical auth domain, redirect domains,
+allowed return hosts, and Google web client ID.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Firebase Dynamic Links are not used. Email actions and hosted callbacks use
+Firebase Hosting paths plus Android App Links and iOS Universal Links:
+
+```text
+https://<auth-canonical-domain>/auth/provider-callback
+https://<auth-canonical-domain>/__/auth/action
+https://<auth-canonical-domain>/__/auth/links
+```
+
+Keep `/__/auth/handler` browser-owned for Firebase web redirect completion.
+
+## Provider Matrix
+
+| Flow | Web | iOS | Android |
+| --- | --- | --- | --- |
+| Email link | Hosted page collects email and completes with Firebase JS. | App collects email, sends Firebase email link, Universal Link opens app, app completes with Firebase. Hosted page is fallback/completion. | App collects email, sends Firebase email link, App Link opens app, app completes with Firebase. Hosted page is fallback/completion. |
+| Google | Hosted page uses Google Identity Services, Firebase credential, exchange-code relay. | App uses `expo-auth-session` PKCE with the iOS Google client, then Firebase credential. | App uses `@react-native-google-signin/google-signin`, then Firebase credential. |
+| Apple | Hosted page uses Firebase redirect with `apple.com`. | App uses `expo-apple-authentication` and the native Apple button. | Apple is hidden unless enabled; when enabled it routes through hosted relay/web flow. |
+| Microsoft | Hosted page uses Firebase redirect with `microsoft.com`. | App uses `expo-auth-session` PKCE, then Firebase credential. | App uses `expo-auth-session` PKCE, then Firebase credential. |
+| Sign out | Firebase sign-out. | Firebase sign-out. | Firebase sign-out plus native Google account-selection cleanup. |
+
+## Environment
+
+Read these values from Terraform outputs after applying `infra/live/<env>`:
+
+- `auth_hosting_url` -> `EXPO_PUBLIC_AUTH_WEB_URL`
+- `firebase_web_config.api_key` -> `EXPO_PUBLIC_FIREBASE_API_KEY`
+- `firebase_web_config.auth_domain` -> `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `firebase_web_config.project_id` -> `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
+- `firebase_web_config.storage_bucket` -> `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `firebase_web_config.messaging_sender_id` -> `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `firebase_web_config.app_id` -> `EXPO_PUBLIC_FIREBASE_APP_ID`
+
+Provider flags:
+
+```bash
+EXPO_PUBLIC_ENABLE_GOOGLE_AUTH_PROVIDER=true
+EXPO_PUBLIC_ENABLE_APPLE_AUTH_PROVIDER=true
+EXPO_PUBLIC_ENABLE_MICROSOFT_AUTH_PROVIDER=true
+```
+
+Native identifiers:
+
+```bash
+EXPO_PUBLIC_ANDROID_PACKAGE_NAME=com.maks.todoapp
+EXPO_PUBLIC_IOS_BUNDLE_ID=com.anonymous.mobile
+```
+
+Provider client IDs and redirects:
+
+```bash
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=000000000000-web.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=000000000000-ios.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_IOS_REDIRECT_URI=com.googleusercontent.apps.000000000000-ios:/oauthredirect
+EXPO_PUBLIC_MICROSOFT_CLIENT_ID=00000000-0000-0000-0000-000000000000
+EXPO_PUBLIC_MICROSOFT_TENANT_ID=common
+EXPO_PUBLIC_MICROSOFT_NATIVE_REDIRECT_URI=
+EXPO_PUBLIC_MICROSOFT_REQUEST_OFFLINE_ACCESS=false
+```
+
+`EXPO_PUBLIC_FIREBASE_AUTH_LINK_DOMAIN` is optional and should be set only for a
+custom Firebase Hosting action-link domain. Default `firebaseapp.com` and
+`web.app` action link domains are selected by Firebase automatically.
+
+Add the same values to the matching EAS environment for every build profile.
+Rebuild after changing OAuth, link-domain, package, bundle, or URL-scheme
+values because native callback config is compiled into the app.
+
+## Provider Registration
+
+Firebase Auth:
+
+- Enable Email/Password and passwordless email link sign-in.
+- Enable Google, Apple, and Microsoft only when their provider credentials are
+  configured.
+- Terraform manages Firebase authorized domains from `auth_canonical_domain`,
+  `auth_redirect_domains`, and `authorized_domains`.
+
+Google:
+
+- Hosted web Google uses the Firebase/Google web OAuth client ID rendered into
+  `auth-config.js`.
+- Android Google requires an Android OAuth client for the installed package and
+  each signing certificate.
+- iOS Google requires an iOS OAuth client for the iOS bundle ID.
+
+Apple:
+
+- iOS native Apple requires the Apple capability, `ios.usesAppleSignIn`, and a
+  real Apple Team ID in `apple-app-site-association`.
+- Web/Android relay requires Apple configured in Firebase Auth.
+
+Microsoft:
+
+- Native Microsoft uses PKCE and state.
+- Register each platform's exact native redirect URI in Microsoft Entra under
+  mobile/desktop redirects.
+- `offline_access` is not requested unless
+  `EXPO_PUBLIC_MICROSOFT_REQUEST_OFFLINE_ACCESS=true`.
+
+## Verification Checklist
+
+Local automated checks run during Phase 10:
+
+- [x] `npm run lint` in `apps/mobile` completed with 0 errors and existing UI
+  import warnings.
+- [x] `npx tsc --noEmit` in `apps/mobile` passed.
+- [x] `node --check apps/auth-api/src/server.js` passed.
+- [x] `node --check apps/auth-web/scripts/render-auth-config.mjs` passed.
+- [x] Hosted auth config render smoke test passed with sample generated config.
+- [x] `terraform fmt -check` for the Firebase auth module passed.
+- [x] Terragrunt HCL format checks for `infra/live/dev` passed.
+- [x] `terraform validate` for `infra/modules/firebase-auth` passed after
+  provider initialization.
+- [x] Repo search found no stale Dynamic Links setup language; docs now state
+  explicitly that Firebase Dynamic Links are not used.
+- [x] Repo search found no old hardcoded Firebase project ID, web client ID, or
+  API key in hosted auth code or auth docs.
+
+Manual runtime matrix to complete against a deployed environment:
+
+- [ ] Web email link: hosted page sends link, link returns to hosted page,
+  `/auth/exchange` creates code, `/auth/session` creates app session.
+- [ ] iOS email link: app sends link, Universal Link opens app, app completes
+  sign-in without a second provider chooser.
+- [ ] Android email link: app sends link, App Link opens app, app completes
+  sign-in without a second provider chooser.
+- [ ] Web Google: hosted page signs in with Google and relays through one-time
+  exchange code.
+- [ ] iOS Google: app AuthSession PKCE flow signs into Firebase directly.
+- [ ] Android Google: native Google Sign-In SDK signs into Firebase directly.
+- [ ] Web Apple: hosted Firebase redirect signs in with Apple.
+- [ ] iOS Apple: native Apple button signs into Firebase directly.
+- [ ] Android Apple: button is hidden when disabled, or routes to hosted relay
+  when enabled.
+- [ ] Web Microsoft: hosted Firebase redirect signs in with Microsoft.
+- [ ] iOS Microsoft: app AuthSession PKCE flow signs into Firebase directly.
+- [ ] Android Microsoft: app AuthSession PKCE flow signs into Firebase directly.
+- [ ] Sign-out clears Firebase state on all platforms and Android Google
+  account selection on Android.
+
+Known gaps before release:
+
+- `apps/auth-web/public/.well-known/apple-app-site-association` still contains
+  `YOUR_TEAM_ID.com.anonymous.mobile`; replace it with the real Apple Team ID
+  and bundle ID before iOS Universal Links can pass.
+- Runtime provider checks require deployed Firebase Hosting, Cloud Run,
+  Firebase Auth provider credentials, registered OAuth redirect URIs, and real
+  iOS/Android builds. They cannot be fully completed by local lint/type checks.
+- The broker rate limiter is per Cloud Run instance. Add an edge/shared limiter
+  if abuse protection needs to be global.

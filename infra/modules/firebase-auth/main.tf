@@ -14,6 +14,7 @@ locals {
     "cloudbilling.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "firebase.googleapis.com",
+    "firestore.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "identitytoolkit.googleapis.com",
@@ -31,8 +32,66 @@ locals {
     if trimspace(hash) != ""
   ])
 
+  target_project_number = var.project_number != null ? var.project_number : tostring(data.google_project.target.number)
+
+  firebase_default_auth_domain = "${google_firebase_project.this.project}.firebaseapp.com"
+  firebase_default_web_domain  = "${google_firebase_project.this.project}.web.app"
+  auth_canonical_domain        = var.auth_canonical_domain == null ? local.firebase_default_auth_domain : trimspace(var.auth_canonical_domain)
+  auth_redirect_domains = distinct([
+    for domain in concat([local.firebase_default_web_domain], var.auth_redirect_domains) : trimspace(domain)
+    if trimspace(domain) != "" && trimspace(domain) != local.auth_canonical_domain
+  ])
+  firebase_authorized_domains = distinct([
+    for domain in concat(var.authorized_domains, [local.firebase_default_auth_domain, local.auth_canonical_domain], local.auth_redirect_domains) : trimspace(domain)
+    if trimspace(domain) != ""
+  ])
+  auth_allowed_return_hosts = distinct([
+    for domain in concat(
+      ["localhost", "127.0.0.1", "auth", local.firebase_default_auth_domain, local.auth_canonical_domain],
+      local.auth_redirect_domains,
+      local.firebase_authorized_domains,
+      var.auth_allowed_return_hosts
+    ) : trimspace(domain)
+    if trimspace(domain) != ""
+  ])
+  auth_web_google_client_id = length(trimspace(var.auth_web_google_client_id)) > 0 ? trimspace(var.auth_web_google_client_id) : nonsensitive(var.google_auth_provider.client_id)
+  auth_web_runtime_config = {
+    allowedReturnHosts         = local.auth_allowed_return_hosts
+    appUrl                     = var.auth_app_url
+    canonicalAuthDomain        = local.auth_canonical_domain
+    firebaseRedirectUserWaitMs = var.auth_web_firebase_redirect_user_wait_ms
+    googleWebClientId          = local.auth_web_google_client_id
+    redirectAuthDomains        = local.auth_redirect_domains
+    firebase = {
+      apiKey            = data.google_firebase_web_app_config.web.api_key
+      appId             = google_firebase_web_app.web.app_id
+      authDomain        = data.google_firebase_web_app_config.web.auth_domain
+      databaseURL       = lookup(data.google_firebase_web_app_config.web, "database_url", "")
+      measurementId     = lookup(data.google_firebase_web_app_config.web, "measurement_id", "")
+      messagingSenderId = lookup(data.google_firebase_web_app_config.web, "messaging_sender_id", "")
+      projectId         = google_firebase_project.this.project
+      storageBucket     = lookup(data.google_firebase_web_app_config.web, "storage_bucket", "")
+    }
+  }
+  auth_web_config_hash = sha256(jsonencode(local.auth_web_runtime_config))
+  auth_web_config_output_path = coalesce(
+    var.auth_web_config_output_path,
+    var.firebase_hosting_public_dir == null ? null : "${var.firebase_hosting_public_dir}/auth-config.js",
+    "apps/auth-web/public/auth-config.js"
+  )
+  auth_web_config_renderer_path = coalesce(
+    var.auth_web_config_renderer_path,
+    var.firebase_hosting_working_dir == null ? null : "${var.firebase_hosting_working_dir}/apps/auth-web/scripts/render-auth-config.mjs",
+    "apps/auth-web/scripts/render-auth-config.mjs"
+  )
+  auth_web_config_template_path = coalesce(
+    var.auth_web_config_template_path,
+    var.firebase_hosting_working_dir == null ? null : "${var.firebase_hosting_working_dir}/apps/auth-web/auth-config.template.js",
+    "apps/auth-web/auth-config.template.js"
+  )
+
   auth_api_cors_origins = length(var.auth_api_cors_origins) > 0 ? var.auth_api_cors_origins : [
-    for domain in var.authorized_domains : "https://${domain}"
+    for domain in local.firebase_authorized_domains : "https://${domain}"
     if !contains(["localhost", "127.0.0.1"], domain)
   ]
 
@@ -63,13 +122,19 @@ locals {
     [
       for file in local.firebase_hosting_public_files : filesha256("${var.firebase_hosting_public_dir}/${file}")
     ],
-    var.firebase_config_path == null ? [] : [filesha256(var.firebase_config_path)]
+    var.firebase_config_path == null ? [] : [filesha256(var.firebase_config_path)],
+    var.auth_web_config_renderer_path == null ? [] : [filesha256(var.auth_web_config_renderer_path)],
+    var.auth_web_config_template_path == null ? [] : [filesha256(var.auth_web_config_template_path)],
+    [local.auth_web_config_hash]
   )))
 
-  cloud_build_service_account_emails = toset([
-    "${data.google_project.target.number}@cloudbuild.gserviceaccount.com",
-    "${data.google_project.target.number}-compute@developer.gserviceaccount.com",
-  ])
+  cloud_build_service_account_emails = var.project_number == null ? {
+    compute_default = "${local.target_project_number}-compute@developer.gserviceaccount.com"
+    legacy          = "${local.target_project_number}@cloudbuild.gserviceaccount.com"
+    } : {
+    "${local.target_project_number}-compute@developer.gserviceaccount.com" = "${local.target_project_number}-compute@developer.gserviceaccount.com"
+    "${local.target_project_number}@cloudbuild.gserviceaccount.com"        = "${local.target_project_number}@cloudbuild.gserviceaccount.com"
+  }
 }
 
 resource "google_project" "this" {
@@ -126,7 +191,7 @@ resource "google_identity_platform_config" "auth" {
   project = google_firebase_project.this.project
 
   autodelete_anonymous_users = var.autodelete_anonymous_users
-  authorized_domains         = var.authorized_domains
+  authorized_domains         = local.firebase_authorized_domains
 
   sign_in {
     allow_duplicate_emails = var.allow_duplicate_emails
@@ -269,6 +334,39 @@ data "google_firebase_apple_app_config" "apple" {
   app_id  = google_firebase_apple_app.apple[0].app_id
 }
 
+resource "google_firestore_database" "default" {
+  count = var.create_firestore_database ? 1 : 0
+
+  provider = google-beta
+
+  project     = google_firebase_project.this.project
+  name        = "(default)"
+  location_id = var.firestore_database_location_id
+  type        = "FIRESTORE_NATIVE"
+
+  depends_on = [
+    google_project_service.required,
+  ]
+}
+
+resource "google_firestore_field" "auth_exchange_code_expires_at" {
+  count = var.enable_auth_exchange_code_ttl ? 1 : 0
+
+  provider = google-beta
+
+  project    = google_firebase_project.this.project
+  database   = "(default)"
+  collection = var.auth_exchange_code_collection
+  field      = "expiresAt"
+
+  ttl_config {}
+
+  depends_on = [
+    google_project_service.required,
+    google_firestore_database.default,
+  ]
+}
+
 resource "google_artifact_registry_repository" "auth_api" {
   provider = google-beta
 
@@ -369,6 +467,14 @@ resource "google_project_iam_member" "auth_api_firebase_auth_admin" {
   member  = "serviceAccount:${google_service_account.auth_api.email}"
 }
 
+resource "google_project_iam_member" "auth_api_datastore_user" {
+  provider = google-beta
+
+  project = google_firebase_project.this.project
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.auth_api.email}"
+}
+
 resource "google_service_account_iam_member" "auth_api_token_creator" {
   provider = google-beta
 
@@ -410,6 +516,36 @@ resource "google_cloud_run_v2_service" "auth_api" {
         value = join(",", local.auth_api_cors_origins)
       }
 
+      env {
+        name  = "AUTH_EXCHANGE_CODE_COLLECTION"
+        value = var.auth_exchange_code_collection
+      }
+
+      env {
+        name  = "AUTH_EXCHANGE_CODE_TTL_MS"
+        value = tostring(var.auth_exchange_code_ttl_ms)
+      }
+
+      env {
+        name  = "AUTH_RATE_LIMIT_WINDOW_MS"
+        value = tostring(var.auth_rate_limit_window_ms)
+      }
+
+      env {
+        name  = "AUTH_EXCHANGE_RATE_LIMIT"
+        value = tostring(var.auth_exchange_rate_limit)
+      }
+
+      env {
+        name  = "AUTH_SESSION_RATE_LIMIT"
+        value = tostring(var.auth_session_rate_limit)
+      }
+
+      env {
+        name  = "AUTH_API_SOURCE_HASH"
+        value = local.auth_api_source_hash
+      }
+
       resources {
         limits = {
           cpu    = var.auth_api_cpu_limit
@@ -433,7 +569,9 @@ resource "google_cloud_run_v2_service" "auth_api" {
 
   depends_on = [
     google_project_iam_member.auth_api_firebase_auth_admin,
+    google_project_iam_member.auth_api_datastore_user,
     google_service_account_iam_member.auth_api_token_creator,
+    google_firestore_database.default,
     terraform_data.auth_api_image,
   ]
 }
@@ -461,11 +599,15 @@ resource "terraform_data" "firebase_hosting_deploy" {
   }
 
   provisioner "local-exec" {
-    command     = "npx --yes firebase-tools deploy --only hosting --project \"$FIREBASE_PROJECT_ID\" --non-interactive"
+    command     = "node \"$AUTH_WEB_CONFIG_RENDERER\" && npx --yes firebase-tools deploy --only hosting --project \"$FIREBASE_PROJECT_ID\" --non-interactive"
     working_dir = var.firebase_hosting_working_dir
 
     environment = {
-      FIREBASE_PROJECT_ID = google_firebase_project.this.project
+      AUTH_WEB_CONFIG          = jsonencode(local.auth_web_runtime_config)
+      AUTH_WEB_CONFIG_OUTPUT   = local.auth_web_config_output_path
+      AUTH_WEB_CONFIG_RENDERER = local.auth_web_config_renderer_path
+      AUTH_WEB_CONFIG_TEMPLATE = local.auth_web_config_template_path
+      FIREBASE_PROJECT_ID      = google_firebase_project.this.project
     }
   }
 

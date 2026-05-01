@@ -48,6 +48,13 @@ Regional infrastructure is standardized on `us-east1`. The module validates
 that regional resources use only that region, and the dev Terragrunt stack
 passes `us-east1` automatically.
 
+Hosted auth domains are environment-specific. In `env.hcl`, set
+`AUTH_CANONICAL_DOMAIN` to the host users should see, set
+`AUTH_REDIRECT_DOMAINS` to any Firebase/custom aliases that should redirect
+there, and set `AUTH_ADDITIONAL_AUTHORIZED_DOMAINS` for standalone web origins
+that also need Firebase Auth. If `AUTH_CANONICAL_DOMAIN` is omitted, the stack
+uses `PROJECT_ID.firebaseapp.com` and redirects `PROJECT_ID.web.app`.
+
 Google and Microsoft sign-in provider credentials can come from either process
 env or Google Secret Manager:
 
@@ -67,13 +74,14 @@ Android/iOS client ID. It should look like
 redirect URI in Google Cloud must include:
 
 ```text
-https://PROJECT_ID.firebaseapp.com/__/auth/handler
+https://AUTH_CANONICAL_DOMAIN/__/auth/handler
 ```
 
-The hosted auth page canonicalizes the `web.app` Firebase Hosting domain to
-`firebaseapp.com` before starting Google sign-in, so native builds can continue
-opening either Firebase Hosting domain while Google receives the allowed
-`firebaseapp.com` redirect URI.
+`AUTH_CANONICAL_DOMAIN` defaults to `PROJECT_ID.firebaseapp.com`. Set it to a
+custom Firebase Hosting domain when dev/prod should use different branded auth
+hosts. Put alias hosts, such as `PROJECT_ID.web.app`, in
+`AUTH_REDIRECT_DOMAINS`; the hosted auth page redirects those hosts to the
+canonical auth domain before starting provider sign-in.
 
 The dev stack defaults `ENABLE_GOOGLE_AUTH_PROVIDER` to `true`. Export
 `ENABLE_GOOGLE_AUTH_PROVIDER=false` if you need to plan or apply with the
@@ -111,13 +119,13 @@ npx eas-cli credentials
 
 Choose Android, select the `com.maks.todoapp` app, then show the keystore credentials and copy the SHA-1 and SHA-256 fingerprints.
 
-If the Firebase Android app already exists outside Terraform, import it before applying. The current app ID is `1:322657163839:android:b0d0619a8d46149dc5b68a`:
+If the Firebase Android app already exists outside Terraform, import it before applying:
 
 ```bash
 cd infra/live/dev
 terragrunt import \
   'google_firebase_android_app.android[0]' \
-  'projects/synthetic-song-473914-h5/androidApps/1:322657163839:android:b0d0619a8d46149dc5b68a'
+  'projects/PROJECT_ID/androidApps/FIREBASE_ANDROID_APP_ID'
 ```
 
 After applying new SHA fingerprints, rebuild the Android app if you are testing updated app-link or auth behavior against a fresh build.
@@ -136,6 +144,17 @@ terragrunt apply
 The apply builds `apps/auth-api`, pushes it to the `us-east1` Artifact Registry
 repository, deploys the `todoapp-auth-api` Cloud Run service in `us-east1`, and
 deploys Firebase Hosting for `apps/auth-web/public`.
+It also creates the default Firestore Native database used for one-time hosted
+auth exchange codes, configures TTL cleanup on the exchange code `expiresAt`
+field, renders `apps/auth-web/public/auth-config.js` from Terraform-managed
+Firebase/Auth settings, passes the broker TTL/rate-limit settings to Cloud Run,
+and grants the auth API service account Firestore access.
+If the target project already has a default Firestore database managed outside
+Terraform, import it or set `create_firestore_database = false` in the stack
+inputs before applying. If the TTL policy is already managed elsewhere, set
+`enable_auth_exchange_code_ttl = false`.
+For existing projects, set `project_number` in `env.hcl` so IAM resource keys
+stay stable while enabling new project services.
 The module grants Cloud Build permissions to both Google Cloud's legacy Cloud
 Build service account and the Compute Engine default service account, since
 newer projects may run default builds as the compute service account. Those
@@ -155,11 +174,17 @@ After apply, use:
 terragrunt output
 ```
 
-The `firebase_web_config` output contains the client config values for the Expo app's `EXPO_PUBLIC_FIREBASE_*` variables.
+The `auth_hosting_url` output is the canonical value for
+`EXPO_PUBLIC_AUTH_WEB_URL`. The `firebase_web_config` output contains the client
+config values for the Expo app's `EXPO_PUBLIC_FIREBASE_*` variables.
+`firebase_authorized_domains` shows the complete Firebase Auth authorized domain
+set managed by Terraform, including the canonical auth domain and redirect
+domains. `auth_redirect_domains` and `auth_allowed_return_hosts` show what is
+rendered into the hosted auth config.
 
 The module can also output Firebase Android and Apple app IDs when those registrations are enabled, but it no longer emits native service files because the mobile app uses the JS Firebase SDK plus browser-backed auth sessions.
 
 The `auth_api_service_url` and `auth_api_container_image` outputs identify the
 deployed auth exchange service. Firebase Hosting serves the static auth page and
 is deployed by the dev Terragrunt stack after Cloud Run is ready, so the
-`/auth/exchange` rewrite can reach Cloud Run in `us-east1`.
+`/auth/exchange` and `/auth/session` rewrites can reach Cloud Run in `us-east1`.

@@ -18,6 +18,30 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "synthetic-song-473914-h5.firebaseapp.com",
+              "pathPrefix": "/auth/provider-callback"
+            },
+            {
+              "scheme": "https",
+              "host": "synthetic-song-473914-h5.firebaseapp.com",
+              "pathPrefix": "/__/auth/action"
+            },
+            {
+              "scheme": "https",
+              "host": "synthetic-song-473914-h5.firebaseapp.com",
+              "pathPrefix": "/__/auth/links"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "predictiveBackGestureEnabled": false,
       "package": "com.maks.todoapp"
     },
@@ -27,6 +51,8 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
+      "@react-native-google-signin/google-signin",
       [
         "expo-splash-screen",
         {

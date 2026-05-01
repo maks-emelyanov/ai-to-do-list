@@ -8,6 +8,17 @@ variable "project_name" {
   type        = string
 }
 
+variable "project_number" {
+  description = "Optional Google Cloud numeric project number. Set this for existing projects to keep IAM resource keys stable while enabling new project services."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.project_number == null || can(regex("^[0-9]+$", var.project_number))
+    error_message = "project_number must contain only digits when set."
+  }
+}
+
 variable "create_project" {
   description = "Whether Terraform should create the Google Cloud project. Set false to enable Firebase/Auth on an existing project."
   type        = bool
@@ -103,6 +114,24 @@ variable "apple_bundle_id" {
   default     = null
 }
 
+variable "create_firestore_database" {
+  description = "Whether to create the default Firestore Native database used for short-lived auth exchange codes."
+  type        = bool
+  default     = true
+}
+
+variable "firestore_database_location_id" {
+  description = "Location ID for the default Firestore Native database."
+  type        = string
+  default     = "us-east1"
+}
+
+variable "enable_auth_exchange_code_ttl" {
+  description = "Whether to configure Firestore TTL on the hosted auth exchange code expiration field."
+  type        = bool
+  default     = true
+}
+
 variable "autodelete_anonymous_users" {
   description = "Whether Firebase Auth should automatically delete anonymous users."
   type        = bool
@@ -116,9 +145,50 @@ variable "allow_duplicate_emails" {
 }
 
 variable "authorized_domains" {
-  description = "Domains authorized for Firebase Auth redirects and email action links."
+  description = "Additional domains authorized for Firebase Auth redirects and email action links. The module also includes the canonical auth domain and redirect domains."
   type        = list(string)
   default     = ["localhost"]
+}
+
+variable "auth_canonical_domain" {
+  description = "Canonical host for the hosted auth page. Defaults to the Firebase firebaseapp.com auth domain."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.auth_canonical_domain == null || can(regex("^[A-Za-z0-9.-]+(:[0-9]+)?$", trimspace(var.auth_canonical_domain)))
+    error_message = "auth_canonical_domain must be a hostname, optionally with a port, and must not include a protocol or path."
+  }
+}
+
+variable "auth_redirect_domains" {
+  description = "Additional hosted auth domains that should redirect to the canonical auth domain."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_allowed_return_hosts" {
+  description = "Additional hosts that the hosted auth page may redirect back to after sign-in."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_app_url" {
+  description = "Fallback native app URL used by the hosted auth page."
+  type        = string
+  default     = "mobile://"
+}
+
+variable "auth_web_google_client_id" {
+  description = "Public Google web OAuth client ID used by the hosted auth page. Defaults to google_auth_provider.client_id."
+  type        = string
+  default     = ""
+}
+
+variable "auth_web_firebase_redirect_user_wait_ms" {
+  description = "Milliseconds the hosted auth page waits for Firebase redirect user restoration."
+  type        = number
+  default     = 2500
 }
 
 variable "enable_email_sign_in" {
@@ -315,6 +385,56 @@ variable "auth_api_allow_unauthenticated" {
   default     = true
 }
 
+variable "auth_exchange_code_collection" {
+  description = "Firestore collection where the auth API stores short-lived hosted auth exchange codes."
+  type        = string
+  default     = "authExchangeCodes"
+}
+
+variable "auth_exchange_code_ttl_ms" {
+  description = "Time to live in milliseconds for hosted auth exchange codes."
+  type        = number
+  default     = 120000
+
+  validation {
+    condition     = var.auth_exchange_code_ttl_ms >= 15000 && var.auth_exchange_code_ttl_ms <= 300000
+    error_message = "auth_exchange_code_ttl_ms must be between 15000 and 300000."
+  }
+}
+
+variable "auth_rate_limit_window_ms" {
+  description = "Fixed rate limit window in milliseconds for hosted auth broker endpoints."
+  type        = number
+  default     = 60000
+
+  validation {
+    condition     = var.auth_rate_limit_window_ms >= 1000 && var.auth_rate_limit_window_ms <= 3600000
+    error_message = "auth_rate_limit_window_ms must be between 1000 and 3600000."
+  }
+}
+
+variable "auth_exchange_rate_limit" {
+  description = "Maximum /auth/exchange requests per rate limit window per Cloud Run instance and client IP."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.auth_exchange_rate_limit >= 1 && var.auth_exchange_rate_limit <= 1000
+    error_message = "auth_exchange_rate_limit must be between 1 and 1000."
+  }
+}
+
+variable "auth_session_rate_limit" {
+  description = "Maximum /auth/session requests per rate limit window per Cloud Run instance and client IP."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.auth_session_rate_limit >= 1 && var.auth_session_rate_limit <= 1000
+    error_message = "auth_session_rate_limit must be between 1 and 1000."
+  }
+}
+
 variable "deploy_firebase_hosting" {
   description = "Whether Terraform should deploy Firebase Hosting after Cloud Run is ready."
   type        = bool
@@ -335,6 +455,24 @@ variable "firebase_hosting_public_dir" {
 
 variable "firebase_config_path" {
   description = "Path to firebase.json. Required when deploy_firebase_hosting is true."
+  type        = string
+  default     = null
+}
+
+variable "auth_web_config_renderer_path" {
+  description = "Path to the hosted auth config renderer script."
+  type        = string
+  default     = null
+}
+
+variable "auth_web_config_template_path" {
+  description = "Path to the hosted auth config template."
+  type        = string
+  default     = null
+}
+
+variable "auth_web_config_output_path" {
+  description = "Path where Terraform should render the generated hosted auth config before Firebase Hosting deploy."
   type        = string
   default     = null
 }
