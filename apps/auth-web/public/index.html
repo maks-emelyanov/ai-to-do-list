@@ -2,7 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f4ef" />
     <title>Todo App Auth</title>
     <style>
       :root {
@@ -23,9 +24,16 @@
         box-sizing: border-box;
       }
 
+      html {
+        min-height: 100%;
+        text-size-adjust: 100%;
+        -webkit-text-size-adjust: 100%;
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
+        min-height: 100svh;
         font-family:
           ui-sans-serif,
           system-ui,
@@ -37,10 +45,15 @@
         color: var(--text);
         display: grid;
         place-items: center;
-        padding: 24px;
+        overflow-x: hidden;
+        padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+          max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
       }
 
       main {
+        display: grid;
+        min-height: 100%;
+        place-items: center;
         width: min(100%, 520px);
       }
 
@@ -50,6 +63,7 @@
         border-radius: 20px;
         padding: 28px;
         box-shadow: 0 20px 50px rgba(28, 31, 35, 0.08);
+        width: 100%;
       }
 
       .stack {
@@ -61,6 +75,7 @@
         margin: 0;
         font-size: 2.25rem;
         line-height: 1.08;
+        overflow-wrap: anywhere;
       }
 
       p {
@@ -93,9 +108,14 @@
         justify-content: center;
         font: inherit;
         font-weight: 700;
+        line-height: 1.2;
         min-height: 52px;
+        min-width: 0;
         padding: 12px 18px;
+        text-align: center;
         text-decoration: none;
+        touch-action: manipulation;
+        width: 100%;
       }
 
       button.primary,
@@ -110,6 +130,13 @@
         opacity: 0.55;
       }
 
+      button:focus-visible,
+      .button:focus-visible,
+      input:focus-visible {
+        outline: 3px solid rgba(20, 110, 245, 0.26);
+        outline-offset: 3px;
+      }
+
       label {
         display: grid;
         gap: 8px;
@@ -120,14 +147,19 @@
         width: 100%;
         border-radius: 14px;
         border: 1px solid var(--border);
+        min-height: 52px;
         padding: 14px 16px;
         font: inherit;
+        font-size: 16px;
+        line-height: 1.35;
         background: white;
       }
 
       .notice,
       .error {
         border-radius: 14px;
+        line-height: 1.45;
+        overflow-wrap: break-word;
         padding: 13px 15px;
       }
 
@@ -144,6 +176,61 @@
       .hidden {
         display: none !important;
       }
+
+      @media (max-width: 480px) {
+        body {
+          padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+            max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+        }
+
+        main {
+          align-items: stretch;
+          width: 100%;
+        }
+
+        .card {
+          align-self: center;
+          border-radius: 18px;
+          padding: 22px 18px;
+        }
+
+        .stack {
+          gap: 14px;
+        }
+
+        h1 {
+          font-size: 2rem;
+          line-height: 1.1;
+        }
+
+        button,
+        .button {
+          min-height: 54px;
+          padding-inline: 16px;
+        }
+      }
+
+      @media (max-width: 360px) {
+        .card {
+          padding-inline: 16px;
+        }
+
+        h1 {
+          font-size: 1.8rem;
+        }
+
+        button,
+        .button {
+          font-size: 0.95rem;
+          padding-inline: 14px;
+        }
+      }
+
+      @supports (min-height: 100dvh) {
+        body {
+          min-height: 100dvh;
+        }
+      }
     </style>
   </head>
   <body>
@@ -155,13 +242,24 @@
           <p id="description">Choose a sign-in method to continue.</p>
         </div>
 
-        <div id="message" class="notice hidden"></div>
-        <div id="error" class="error hidden"></div>
+        <div id="message" class="notice hidden" aria-live="polite"></div>
+        <div id="error" class="error hidden" role="alert"></div>
 
         <form id="email-form" class="stack">
           <label for="email">
             Email
-            <input id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+            <input
+              id="email"
+              type="email"
+              autocomplete="email"
+              autocapitalize="none"
+              autocorrect="off"
+              enterkeyhint="send"
+              inputmode="email"
+              placeholder="you@example.com"
+              required
+              spellcheck="false"
+            />
           </label>
           <button id="email-button" class="primary" type="submit">Send sign-in link</button>
         </form>
@@ -171,12 +269,13 @@
           <button data-provider="apple" type="button">Continue with Apple</button>
           <button data-provider="microsoft" type="button">Continue with Microsoft</button>
         </div>
-        <div id="google-identity-button" class="hidden"></div>
 
+        <button id="relay-action" class="primary hidden" type="button">Continue</button>
         <a id="open-app" class="button primary hidden" href="mobile://">Open app</a>
       </section>
     </main>
 
+    <script src="/auth-config.js"></script>
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
       import {
@@ -185,6 +284,7 @@
         getAuth,
         getRedirectResult,
         isSignInWithEmailLink,
+        onAuthStateChanged,
         sendSignInLinkToEmail,
         signInWithEmailLink,
         signInWithCredential,
@@ -192,23 +292,30 @@
         signOut,
       } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
+      const hostedAuthConfig = requireHostedAuthConfig();
       const AUTH_SESSION_KEY = "todoapp.hostedAuthSession";
       const EMAIL_KEY = "todoapp.emailForSignIn";
-      const APP_URL = "mobile://";
-      const DEFAULT_FIREBASE_AUTH_DOMAIN = "synthetic-song-473914-h5.firebaseapp.com";
-      const CANONICAL_AUTH_HOST = DEFAULT_FIREBASE_AUTH_DOMAIN;
-      const REDIRECT_AUTH_HOSTS = new Set(["synthetic-song-473914-h5.web.app"]);
-      const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
-      const GOOGLE_WEB_CLIENT_ID = "322657163839-2mhk9udev5o2epc5ud6nam8ajo7ia988.apps.googleusercontent.com";
+      const APP_URL = hostedAuthConfig.appUrl;
+      const DEFAULT_FIREBASE_AUTH_DOMAIN = normalizeHost(hostedAuthConfig.firebase.authDomain);
+      const CANONICAL_AUTH_HOST = normalizeHost(hostedAuthConfig.canonicalAuthDomain);
+      const REDIRECT_AUTH_HOSTS = new Set(
+        readStringList(hostedAuthConfig.redirectAuthDomains).map(normalizeHost).filter(Boolean)
+      );
       const AUTH_EXCHANGE_URL = new URL("/auth/exchange", window.location.origin).toString();
+      const FIREBASE_REDIRECT_USER_WAIT_MS = Number(hostedAuthConfig.firebaseRedirectUserWaitMs || 2500);
+      const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
+      const GOOGLE_WEB_CLIENT_ID = hostedAuthConfig.googleWebClientId || "";
       const ALLOWED_RETURN_PROTOCOLS = new Set(["http:", "https:", "mobile:"]);
-      const ALLOWED_RETURN_HOSTS = new Set([
-        "localhost",
-        "127.0.0.1",
-        "synthetic-song-473914-h5.firebaseapp.com",
-        "synthetic-song-473914-h5.web.app",
-        "auth",
-      ]);
+      const ALLOWED_RETURN_HOSTS = new Set(
+        [
+          "localhost",
+          "127.0.0.1",
+          "auth",
+          DEFAULT_FIREBASE_AUTH_DOMAIN,
+          CANONICAL_AUTH_HOST,
+          ...readStringList(hostedAuthConfig.allowedReturnHosts).map(normalizeHost),
+        ].filter(Boolean)
+      );
 
       if (REDIRECT_AUTH_HOSTS.has(window.location.hostname)) {
         const canonicalUrl = new URL(window.location.href);
@@ -218,13 +325,21 @@
       }
 
       const firebaseConfig = {
-        apiKey: "REMOVED_GOOGLE_API_KEY",
+        apiKey: hostedAuthConfig.firebase.apiKey,
         authDomain: getFirebaseAuthDomain(),
-        projectId: "synthetic-song-473914-h5",
-        storageBucket: "synthetic-song-473914-h5.firebasestorage.app",
-        messagingSenderId: "322657163839",
-        appId: "1:322657163839:web:42bcb01db1c191d8c5b68a",
+        projectId: hostedAuthConfig.firebase.projectId,
+        storageBucket: hostedAuthConfig.firebase.storageBucket,
+        messagingSenderId: hostedAuthConfig.firebase.messagingSenderId,
+        appId: hostedAuthConfig.firebase.appId,
       };
+
+      if (hostedAuthConfig.firebase.measurementId) {
+        firebaseConfig.measurementId = hostedAuthConfig.firebase.measurementId;
+      }
+
+      if (hostedAuthConfig.firebase.databaseURL) {
+        firebaseConfig.databaseURL = hostedAuthConfig.firebase.databaseURL;
+      }
 
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
@@ -236,13 +351,49 @@
       const emailInput = document.getElementById("email");
       const emailButton = document.getElementById("email-button");
       const providerActions = document.getElementById("provider-actions");
-      const googleIdentityButton = document.getElementById("google-identity-button");
+      const relayAction = document.getElementById("relay-action");
       const openApp = document.getElementById("open-app");
       let googleIdentityScriptPromise = null;
-      let isGoogleIdentityInitialized = false;
+      let relayProvider = null;
+
+      function requireHostedAuthConfig() {
+        const config = window.TODOAPP_AUTH_CONFIG;
+
+        if (!config || typeof config !== "object" || !config.firebase) {
+          throw new Error("Hosted auth configuration is missing.");
+        }
+
+        return config;
+      }
+
+      function readStringList(value) {
+        return Array.isArray(value) ? value : [];
+      }
+
+      function normalizeHost(value) {
+        if (typeof value !== "string" || !value.trim()) {
+          return "";
+        }
+
+        const trimmed = value.trim();
+
+        try {
+          return new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`).hostname;
+        } catch {
+          return trimmed;
+        }
+      }
 
       function getParams() {
         return new URL(window.location.href).searchParams;
+      }
+
+      function createState() {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes)
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
       }
 
       function getFirebaseAuthDomain() {
@@ -270,11 +421,73 @@
         error.classList.add("hidden");
       }
 
+      function hideSignInControls() {
+        emailForm.classList.add("hidden");
+        providerActions.classList.add("hidden");
+        relayAction.classList.add("hidden");
+      }
+
       function setBusy(isBusy) {
         emailButton.disabled = isBusy;
+        relayAction.disabled = isBusy;
         document.querySelectorAll("#provider-actions button").forEach((button) => {
           button.disabled = isBusy;
         });
+      }
+
+      function getProviderLabel(providerId) {
+        if (providerId === "google") {
+          return "Google";
+        }
+
+        if (providerId === "apple") {
+          return "Apple";
+        }
+
+        if (providerId === "microsoft") {
+          return "Microsoft";
+        }
+
+        return "your provider";
+      }
+
+      function isSupportedProvider(providerId) {
+        return ["apple", "google", "microsoft"].includes(providerId);
+      }
+
+      function showProviderRelay(providerId, phase = "start") {
+        const providerLabel = getProviderLabel(providerId);
+
+        emailForm.classList.add("hidden");
+        providerActions.classList.add("hidden");
+        relayAction.classList.add("hidden");
+        title.textContent = phase === "finish" ? "Finishing sign-in" : `Taking you to ${providerLabel}`;
+        description.textContent =
+          phase === "finish"
+            ? "Completing the secure sign-in handoff."
+            : "Continue in the secure sign-in window.";
+      }
+
+      function showProviderRetry(providerId) {
+        relayProvider = providerId;
+        relayAction.textContent = `Continue with ${getProviderLabel(providerId)}`;
+        relayAction.classList.remove("hidden");
+      }
+
+      function showEmailLinkMode() {
+        providerActions.classList.add("hidden");
+        relayAction.classList.add("hidden");
+        title.textContent = "Continue with email";
+        description.textContent = "Enter your email to receive a secure sign-in link.";
+      }
+
+      function showNativeGoogleHandledInApp(session) {
+        hideSignInControls();
+        title.textContent = "Return to Todo App";
+        description.textContent = "Google sign-in is handled in the app on this device.";
+        openApp.href = parseReturnTo(session.returnTo).toString();
+        openApp.classList.remove("hidden");
+        showMessage("Open the app and use Continue with Google there.");
       }
 
       function parseReturnTo(rawReturnTo) {
@@ -310,18 +523,85 @@
         }
       }
 
+      function getNestedEmailActionUrl(parsedUrl) {
+        const nestedLink =
+          parsedUrl.searchParams.get("link") || parsedUrl.searchParams.get("deep_link_id");
+
+        if (!nestedLink) {
+          return null;
+        }
+
+        const nestedUrl = new URL(nestedLink, window.location.origin);
+
+        ["apiKey", "mode", "oobCode", "continueUrl", "lang", "tenantId"].forEach((key) => {
+          const value = parsedUrl.searchParams.get(key);
+
+          if (value && !nestedUrl.searchParams.has(key)) {
+            nestedUrl.searchParams.set(key, value);
+          }
+        });
+
+        return nestedUrl;
+      }
+
+      function getEmailActionUrl(url = window.location.href, depth = 0) {
+        if (depth > 3) {
+          return new URL(url, window.location.origin);
+        }
+
+        const parsedUrl = new URL(url, window.location.origin);
+
+        if (parsedUrl.pathname !== "/__/auth/links") {
+          return parsedUrl;
+        }
+
+        const nestedUrl = getNestedEmailActionUrl(parsedUrl);
+
+        if (!nestedUrl) {
+          return parsedUrl;
+        }
+
+        return getEmailActionUrl(nestedUrl.toString(), depth + 1);
+      }
+
+      function getCurrentEmailLinkUrl() {
+        return getEmailActionUrl().toString();
+      }
+
+      function readContinueUrlSession() {
+        const continueUrl =
+          getParams().get("continueUrl") || getEmailActionUrl().searchParams.get("continueUrl");
+
+        if (!continueUrl) {
+          return {};
+        }
+
+        try {
+          const parsedContinueUrl = new URL(continueUrl);
+
+          return {
+            platform: parsedContinueUrl.searchParams.get("platform") || undefined,
+            returnTo: parsedContinueUrl.searchParams.get("returnTo") || undefined,
+            state: parsedContinueUrl.searchParams.get("state") || undefined,
+          };
+        } catch {
+          return {};
+        }
+      }
+
       function readSession() {
         const params = getParams();
         const stored = readStoredSession();
+        const continueUrlSession = readContinueUrlSession();
         const state = params.get("state") || "";
         const fromUrl = {
           ...stored,
-          platform: params.get("platform") || stored?.platform || "web",
-          returnTo: params.get("returnTo") || stored?.returnTo || APP_URL,
-          state: state || stored?.state || "",
+          platform: params.get("platform") || continueUrlSession.platform || stored?.platform || "web",
+          returnTo: params.get("returnTo") || continueUrlSession.returnTo || stored?.returnTo || APP_URL,
+          state: state || continueUrlSession.state || stored?.state || "",
         };
 
-        if (state) {
+        if (state || continueUrlSession.state) {
           sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(fromUrl));
           return fromUrl;
         }
@@ -331,6 +611,24 @@
 
       function clearSession() {
         sessionStorage.removeItem(AUTH_SESSION_KEY);
+      }
+
+      function writeSession(session) {
+        sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+      }
+
+      function ensureSessionState(session = readSession()) {
+        if (session.state) {
+          return session;
+        }
+
+        const nextSession = {
+          ...session,
+          state: createState(),
+        };
+
+        writeSession(nextSession);
+        return nextSession;
       }
 
       function removeProviderFromUrl() {
@@ -361,11 +659,55 @@
         window.location.replace(nextUrl.toString());
       }
 
-      function getProvider(providerId) {
+      function getMobileSchemeCallbackUrl(callbackUrl) {
+        const nextUrl = new URL(callbackUrl);
+        const appUrl = new URL("mobile://auth/provider-callback");
+
+        nextUrl.searchParams.forEach((value, key) => {
+          appUrl.searchParams.set(key, value);
+        });
+
+        return appUrl.toString();
+      }
+
+      function isHostedCallbackLanding() {
+        return window.location.pathname === "/auth/provider-callback";
+      }
+
+      function hasHostedCallbackPayload() {
+        const params = getParams();
+
+        return Boolean(params.get("provider") && params.get("code") && params.get("state"));
+      }
+
+      function showHostedCallbackFallback() {
+        if (!isHostedCallbackLanding() || !hasHostedCallbackPayload()) {
+          return false;
+        }
+
+        const appCallbackUrl = getMobileSchemeCallbackUrl(window.location.href);
+
+        clearSession();
+        hideSignInControls();
+        title.textContent = "Continue to Todo App";
+        description.textContent = "Sign-in is complete. Return to the app to finish.";
+        openApp.href = appCallbackUrl;
+        openApp.classList.remove("hidden");
+        showMessage("If Android does not open the app automatically, tap Continue.");
+
+        window.setTimeout(() => {
+          window.location.assign(appCallbackUrl);
+        }, 300);
+
+        return true;
+      }
+
+      function getRedirectProvider(providerId) {
         if (providerId === "google") {
           const provider = new GoogleAuthProvider();
           provider.addScope("email");
           provider.addScope("profile");
+          provider.setCustomParameters({ prompt: "select_account" });
           return provider;
         }
 
@@ -383,25 +725,51 @@
           return provider;
         }
 
-        throw new Error("Unknown sign-in provider.");
+        throw new Error("Unknown redirect sign-in provider.");
       }
 
-      async function exchangeFirebaseIdToken(idToken) {
-        const response = await fetch(AUTH_EXCHANGE_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ idToken }),
-        });
+      function isGoogleProvider(providerId) {
+        return providerId === "google" || providerId === "google.com";
+      }
 
-        const payload = await response.json().catch(() => ({}));
-
-        if (!response.ok || typeof payload.token !== "string") {
-          throw new Error("Unable to finish sign-in with the auth server.");
+      function getFirebaseProviderId(providerId) {
+        if (isGoogleProvider(providerId)) {
+          return "google.com";
         }
 
-        return payload.token;
+        if (providerId === "apple") {
+          return "apple.com";
+        }
+
+        if (providerId === "microsoft") {
+          return "microsoft.com";
+        }
+
+        return null;
+      }
+
+      function userMatchesProvider(user, providerId) {
+        const firebaseProviderId = getFirebaseProviderId(providerId);
+
+        if (!firebaseProviderId) {
+          return false;
+        }
+
+        return user.providerData.some((provider) => provider.providerId === firebaseProviderId);
+      }
+
+      function isStaleGoogleRedirectError(error) {
+        const message =
+          typeof error === "object" && error && "message" in error
+            ? String(error.message)
+            : String(error ?? "");
+
+        return (
+          message.includes("google.com") &&
+          (message.includes("client secret") ||
+            message.includes("__/auth/handler") ||
+            message.includes("auth/invalid-credential"))
+        );
       }
 
       function loadScript(src) {
@@ -424,138 +792,154 @@
         });
       }
 
-      async function loadGoogleIdentityServices() {
-        if (window.google?.accounts?.id) {
-          return window.google.accounts.id;
+      async function loadGoogleOAuth2() {
+        if (window.google?.accounts?.oauth2) {
+          return window.google.accounts.oauth2;
         }
 
         googleIdentityScriptPromise ??= loadScript(GOOGLE_IDENTITY_SCRIPT_URL);
         await googleIdentityScriptPromise;
 
-        if (!window.google?.accounts?.id) {
+        if (!window.google?.accounts?.oauth2) {
           throw new Error("Unable to load Google sign-in.");
         }
 
-        return window.google.accounts.id;
+        return window.google.accounts.oauth2;
       }
 
-      async function completeGoogleIdentitySignIn(response) {
-        if (!response?.credential) {
-          throw new Error("Google sign-in did not return an identity token.");
+      async function requestGoogleAccessToken() {
+        if (!GOOGLE_WEB_CLIENT_ID) {
+          throw new Error("Google sign-in is not configured for this auth environment.");
         }
 
-        clearStatus();
-        setBusy(true);
+        const googleOAuth2 = await loadGoogleOAuth2();
 
-        const credential = GoogleAuthProvider.credential(response.credential);
+        return new Promise((resolve, reject) => {
+          const tokenClient = googleOAuth2.initTokenClient({
+            client_id: GOOGLE_WEB_CLIENT_ID,
+            scope: "openid email profile",
+            callback: (response) => {
+              if (response?.error) {
+                reject(new Error(response.error_description || response.error));
+                return;
+              }
+
+              if (!response?.access_token) {
+                reject(new Error("Google sign-in did not return an access token."));
+                return;
+              }
+
+              resolve(response.access_token);
+            },
+            error_callback: (response) => {
+              reject(new Error(response?.message || response?.type || "Unable to open Google sign-in."));
+            },
+          });
+
+          tokenClient.requestAccessToken({
+            prompt: "select_account",
+          });
+        });
+      }
+
+      function waitForRedirectUser(providerId) {
+        if (auth.currentUser && userMatchesProvider(auth.currentUser, providerId)) {
+          return Promise.resolve(auth.currentUser);
+        }
+
+        return new Promise((resolve) => {
+          let unsubscribe = () => {};
+          const timeoutId = window.setTimeout(() => {
+            unsubscribe();
+            resolve(auth.currentUser && userMatchesProvider(auth.currentUser, providerId) ? auth.currentUser : null);
+          }, FIREBASE_REDIRECT_USER_WAIT_MS);
+
+          unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (!user || !userMatchesProvider(user, providerId)) {
+              return;
+            }
+
+            window.clearTimeout(timeoutId);
+            unsubscribe();
+            resolve(user);
+          });
+        });
+      }
+
+      function resolveRedirectUser(providerId) {
+        const authStateUserPromise = waitForRedirectUser(providerId);
+        const redirectResultUserPromise = getRedirectResult(auth).then(
+          (result) => result?.user ?? authStateUserPromise
+        );
+
+        return Promise.race([redirectResultUserPromise, authStateUserPromise]);
+      }
+
+      async function createAuthExchangeCode(idToken, providerId) {
+        const session = ensureSessionState(readSession());
+        const response = await fetch(AUTH_EXCHANGE_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            idToken,
+            platform: session.platform,
+            provider: providerId,
+            returnTo: session.returnTo,
+            state: session.state,
+          }),
+        });
+
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok || typeof payload.code !== "string") {
+          throw new Error("Unable to finish sign-in with the auth server.");
+        }
+
+        return payload.code;
+      }
+
+      async function beginGoogleSignIn() {
+        const accessToken = await requestGoogleAccessToken();
+        const credential = GoogleAuthProvider.credential(null, accessToken);
         const result = await signInWithCredential(auth, credential);
-        const token = await exchangeFirebaseIdToken(await result.user.getIdToken());
+        const code = await createAuthExchangeCode(await result.user.getIdToken(), "google");
         await signOut(auth).catch(() => {});
 
         redirectToReturnTo({
           provider: "google",
-          token,
+          code,
         });
-      }
-
-      async function initializeGoogleIdentityServices() {
-        const googleAccountsId = await loadGoogleIdentityServices();
-
-        if (!isGoogleIdentityInitialized) {
-          googleAccountsId.initialize({
-            client_id: GOOGLE_WEB_CLIENT_ID,
-            callback: (response) => {
-              completeGoogleIdentitySignIn(response).catch((nextError) => {
-                setBusy(false);
-                showError(nextError?.message ?? "Unable to finish Google sign-in.");
-              });
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
-          isGoogleIdentityInitialized = true;
-        }
-
-        return googleAccountsId;
-      }
-
-      async function renderGoogleIdentityButton() {
-        const googleAccountsId = await initializeGoogleIdentityServices();
-        const width = Math.min(400, Math.max(240, googleIdentityButton.getBoundingClientRect().width || 400));
-
-        googleIdentityButton.replaceChildren();
-        googleIdentityButton.classList.remove("hidden");
-        googleAccountsId.renderButton(googleIdentityButton, {
-          type: "standard",
-          theme: "outline",
-          size: "large",
-          text: "continue_with",
-          shape: "pill",
-          width,
-        });
-      }
-
-      async function showGoogleIdentityButtonFallback() {
-        await renderGoogleIdentityButton();
-        showMessage("Use the Google button below to continue.");
-        setBusy(false);
-      }
-
-      async function beginGoogleIdentitySignIn() {
-        let promptDisplayed = false;
-        const googleAccountsId = await initializeGoogleIdentityServices();
-
-        googleIdentityButton.classList.add("hidden");
-        googleIdentityButton.replaceChildren();
-
-        googleAccountsId.prompt((notification) => {
-          if (notification.isDisplayMoment?.()) {
-            promptDisplayed = true;
-            return;
-          }
-
-          if (notification.isDismissedMoment?.()) {
-            setBusy(false);
-            return;
-          }
-
-          if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
-            showGoogleIdentityButtonFallback().catch((nextError) => {
-              setBusy(false);
-              showError(nextError?.message ?? "Unable to start Google sign-in.");
-            });
-          }
-        });
-
-        window.setTimeout(() => {
-          if (!promptDisplayed && googleIdentityButton.classList.contains("hidden")) {
-            showGoogleIdentityButtonFallback().catch((nextError) => {
-              setBusy(false);
-              showError(nextError?.message ?? "Unable to start Google sign-in.");
-            });
-          }
-        }, 1500);
       }
 
       async function beginProviderSignIn(providerId) {
         clearStatus();
-        setBusy(true);
 
-        const session = readSession();
+        let session = ensureSessionState(readSession());
 
-        if (!session.state) {
-          throw new Error("This sign-in request is missing state.");
-        }
-
-        sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ ...session, provider: providerId }));
-        removeProviderFromUrl();
-
-        if (providerId === "google") {
-          await beginGoogleIdentitySignIn();
+        if (providerId === "google" && session.platform === "native") {
+          showNativeGoogleHandledInApp(session);
           return;
         }
 
-        await signInWithRedirect(auth, getProvider(providerId));
+        showProviderRelay(providerId);
+        setBusy(true);
+
+        writeSession({
+          ...session,
+          provider: providerId,
+          providerFlow: providerId === "google" ? "google-token" : "firebase-redirect",
+        });
+        removeProviderFromUrl();
+
+        if (providerId === "google") {
+          await beginGoogleSignIn();
+          return;
+        }
+
+        await signOut(auth).catch(() => {});
+        await signInWithRedirect(auth, getRedirectProvider(providerId));
       }
 
       async function completeProviderRedirect() {
@@ -566,31 +950,56 @@
           return false;
         }
 
-        if (providerId === "google") {
+        if (isGoogleProvider(providerId) && session.providerFlow === "google-token") {
+          writeSession({
+            ...session,
+            provider: undefined,
+            providerFlow: undefined,
+          });
+          await signOut(auth).catch(() => {});
           return false;
         }
 
-        const result = await getRedirectResult(auth);
+        showProviderRelay(providerId, "finish");
 
-        if (!result) {
+        let user = null;
+
+        try {
+          user = await resolveRedirectUser(providerId);
+        } catch (redirectError) {
+          if (!isStaleGoogleRedirectError(redirectError)) {
+            throw redirectError;
+          }
+
+          writeSession({
+            ...session,
+            provider: undefined,
+            providerFlow: undefined,
+          });
+          await signOut(auth).catch(() => {});
+          showProviderRetry("google");
+          return false;
+        }
+
+        if (!user) {
           throw new Error(
-            "Google sign-in returned without a Firebase credential. Confirm this auth domain is configured as a Google OAuth redirect URI, then try again."
+            "Sign-in completed, but Firebase did not restore a signed-in account. Open the sign-in page in your browser and try again."
           );
         }
 
-        const token = await exchangeFirebaseIdToken(await result.user.getIdToken());
+        const code = await createAuthExchangeCode(await user.getIdToken(), providerId);
         await signOut(auth).catch(() => {});
 
         redirectToReturnTo({
           provider: providerId,
-          token,
+          code,
         });
 
         return true;
       }
 
       async function sendEmailLink(email) {
-        const session = readSession();
+        const session = ensureSessionState(readSession());
         const url = new URL(window.location.href);
 
         url.search = "";
@@ -609,7 +1018,9 @@
       }
 
       async function completeEmailLink() {
-        if (!isSignInWithEmailLink(auth, window.location.href)) {
+        const emailLinkUrl = getCurrentEmailLinkUrl();
+
+        if (!isSignInWithEmailLink(auth, emailLinkUrl)) {
           return false;
         }
 
@@ -624,19 +1035,19 @@
           return true;
         }
 
-        await finishEmailLink(storedEmail);
+        await finishEmailLink(storedEmail, emailLinkUrl);
         return true;
       }
 
-      async function finishEmailLink(email) {
-        const result = await signInWithEmailLink(auth, email, window.location.href);
-        const token = await exchangeFirebaseIdToken(await result.user.getIdToken());
+      async function finishEmailLink(email, emailLinkUrl = getCurrentEmailLinkUrl()) {
+        const result = await signInWithEmailLink(auth, email, emailLinkUrl);
+        const code = await createAuthExchangeCode(await result.user.getIdToken(), "emailLink");
         await signOut(auth).catch(() => {});
 
         localStorage.removeItem(EMAIL_KEY);
         redirectToReturnTo({
           provider: "emailLink",
-          token,
+          code,
         });
       }
 
@@ -646,6 +1057,11 @@
         const session = readSession();
 
         openApp.href = parseReturnTo(session.returnTo).toString();
+        void loadGoogleOAuth2().catch(() => {});
+
+        if (showHostedCallbackFallback()) {
+          return;
+        }
 
         try {
           if (await completeEmailLink()) {
@@ -656,20 +1072,35 @@
             return;
           }
         } catch (nextError) {
+          const sessionAfterError = readSession();
+
+          if (isSupportedProvider(sessionAfterError.provider)) {
+            showProviderRelay(sessionAfterError.provider);
+            showProviderRetry(sessionAfterError.provider);
+          }
+
           showError(nextError?.message ?? "Unable to complete sign-in.");
           setBusy(false);
           return;
         }
 
         if (mode === "email-link") {
-          title.textContent = "Check your email";
-          description.textContent = "Open the sign-in link we sent to finish.";
+          showEmailLinkMode();
+        } else if (mode) {
+          providerActions.classList.add("hidden");
+          relayAction.classList.add("hidden");
         }
 
         const requestedProvider = params.get("provider");
 
-        if (["google", "apple", "microsoft"].includes(requestedProvider)) {
+        if (requestedProvider === "google" && session.platform === "web") {
+          showProviderRelay("google");
+          showProviderRetry("google");
+        } else if (isSupportedProvider(requestedProvider)) {
           await beginProviderSignIn(requestedProvider);
+        } else if (requestedProvider) {
+          hideSignInControls();
+          showError("Unknown sign-in provider.");
         }
       }
 
@@ -680,8 +1111,9 @@
 
         const email = emailInput.value.trim();
 
-        const action = isSignInWithEmailLink(auth, window.location.href)
-          ? finishEmailLink(email)
+        const emailLinkUrl = getCurrentEmailLinkUrl();
+        const action = isSignInWithEmailLink(auth, emailLinkUrl)
+          ? finishEmailLink(email, emailLinkUrl)
           : sendEmailLink(email);
 
         action
@@ -706,7 +1138,31 @@
         });
       });
 
+      relayAction.addEventListener("click", () => {
+        if (!relayProvider) {
+          return;
+        }
+
+        beginProviderSignIn(relayProvider).catch((nextError) => {
+          setBusy(false);
+          showProviderRetry(relayProvider);
+          showError(nextError?.message ?? "Unable to start sign-in.");
+        });
+      });
+
       init().catch((nextError) => {
+        const params = getParams();
+        const requestedProvider = params.get("provider");
+
+        setBusy(false);
+
+        if (isSupportedProvider(requestedProvider)) {
+          showProviderRelay(requestedProvider);
+          showProviderRetry(requestedProvider);
+        } else if (requestedProvider) {
+          hideSignInControls();
+        }
+
         showError(nextError?.message ?? "Unable to load sign-in.");
       });
     </script>

@@ -1,12 +1,22 @@
-export function redirectSystemPath({ path }: { initial: boolean; path: string }) {
+export function redirectSystemPath({
+  path,
+}: {
+  initial: boolean;
+  path: string;
+}) {
   try {
     const url = new URL(path, 'mobile://');
     const pathWithHost = `${url.hostname}${url.pathname}`;
     const isFirebaseAuthPath =
       url.pathname.includes('/__/auth/') || pathWithHost.includes('__/auth/');
+    const isOAuthRedirect =
+      url.pathname === '/oauthredirect' ||
+      url.hostname === 'oauthredirect' ||
+      pathWithHost === 'oauthredirect';
 
     if (
       isFirebaseAuthPath ||
+      isOAuthRedirect ||
       url.pathname === '/auth/provider-callback' ||
       url.pathname === '/provider-callback' ||
       (url.hostname === 'auth' && url.pathname === '/provider-callback')

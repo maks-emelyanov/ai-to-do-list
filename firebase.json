@@ -3,12 +3,57 @@
     "public": "apps/auth-web/public",
     "ignore": [
       "firebase.json",
-      "**/.*",
+      "**/.DS_Store",
+      "**/.git/**",
       "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "/.well-known/apple-app-site-association",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "/.well-known/assetlinks.json",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0"
+          }
+        ]
+      },
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store, max-age=0"
+          }
+        ]
+      }
     ],
     "rewrites": [
       {
         "source": "/auth/exchange",
+        "run": {
+          "serviceId": "todoapp-auth-api",
+          "region": "us-east1"
+        }
+      },
+      {
+        "source": "/auth/session",
         "run": {
           "serviceId": "todoapp-auth-api",
           "region": "us-east1"

@@ -13,6 +13,7 @@ dist/
 wheels/
 *.egg-info/
 .eggs/
+apps/auth-web/public/auth-config.js
 
 # Virtual environments
 .venv/
@@ -32,6 +33,7 @@ venv/
 # Terraform and Terragrunt local state/cache
 .terraform/
 .terragrunt-cache/
+infra/modules/firebase-auth/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfplan
